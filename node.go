@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"log"
 	"math/rand"
 	"net"
 	"sync"
@@ -22,17 +22,17 @@ func (self *Node) init() bool {
 	var err error
 	self.conn, err = net.Dial("tcp", self.Host)
 	if err != nil {
-		fmt.Println("net dial host fail:", self.Host)
+		log.Println("net dial host fail: %v", self.Host)
 		return false
 	}
-	fmt.Println("connect to ", self.Host, " succ")
+	log.Println("connect to %s succ", self.Host)
 	self.bconn = true
 	return true
 
 }
 
 func (self *Node) Dowork(pbp *PBDataPack) *PBDataPack {
-	fmt.Println("send to ", self.Host, self.conn)
+	log.Println("send to %s", self.Host)
 	if pbp.Send(self.conn) == false {
 		self.bconn = false
 		return nil
@@ -67,8 +67,7 @@ func GetNodeList() *NodeList {
 	return g_NodeList
 }
 
-func (self *NodeList) _DoRebalance() {
-
+func (self *NodeList) _doRebalance() {
 	//get _totalWeight
 	self._totalWeight = uint32(0)
 	for _, node := range self._lst {
@@ -88,18 +87,19 @@ func (self *NodeList) _DoRebalance() {
 		node.EndW = startW + node.Weight
 		startW = node.EndW
 	}
-	fmt.Println("after dorebal total:", self._totalWeight, ",alivenum:", self._AliveCount())
+	log.Println("after dorebal total: %d, alivecount: %d", self._totalWeight, self._aliveCount())
 }
 
 func (self *NodeList) init(cfgf string) {
 	rand.Seed(time.Now().UnixNano())
+
 	//born all node from cfg
 	cfg := GetCfgData(cfgf)
 	self._totalWeight = uint32(0)
-	fmt.Println("called Nodelist init, jsonv:")
 	for _, elem := range cfg.Ary {
 		self._totalWeight += elem.Weight
 	}
+
 	startW := uint32(0)
 	for _, elem := range cfg.Ary {
 		node := &Node{
@@ -114,7 +114,6 @@ func (self *NodeList) init(cfgf string) {
 	}
 
 	//connect to all host
-	fmt.Println("called Nodelist init, jsonv:")
 	bfind := false
 	for _, node := range self._lst {
 		if !node.init() {
@@ -122,25 +121,28 @@ func (self *NodeList) init(cfgf string) {
 		}
 	}
 	if bfind {
-		self._DoRebalance()
+		self._doRebalance()
 	}
 
-	//init timer
-	tk := time.NewTicker(time.Second)
-    go func() {
-        for{
-            select {
-            case <-tk.C:
-                self.ChkAlive()
-            case <-self.exitCh:
-                return
-            }
-        }
-	}()
-
+	//init timer, do reconnect
+	self._doReconnect()
 }
 
-func (self *NodeList) _AliveCount() int {
+func (self *NodeList) _doReconnect() {
+	tk := time.NewTicker(time.Second)
+	go func() {
+		for {
+			select {
+			case <-tk.C:
+				self.ChkAlive()
+			case <-self.exitCh:
+				return
+			}
+		}
+	}()
+}
+
+func (self *NodeList) _aliveCount() int {
 	ct := 0
 	for _, nd := range self._lst {
 		if nd.bconn {
@@ -163,14 +165,14 @@ func (self *NodeList) ChkAlive() {
 		}
 	}
 	if bfind {
-		self._DoRebalance()
+		self._doRebalance()
 	}
 }
 
 func (self *NodeList) Dispatch(pbp *PBDataPack) *PBDataPack {
 	self.Lock()
 	x := rand.Intn(int(self._totalWeight))
-	fmt.Println("Dispatch total:", self._totalWeight, ", x:", x)
+	log.Println("Dispatch total: %d ,nowrand: %d", self._totalWeight, x)
 
 	for _, nd := range self._lst {
 		if nd.bconn == false {
@@ -179,18 +181,17 @@ func (self *NodeList) Dispatch(pbp *PBDataPack) *PBDataPack {
 		if uint32(x) >= nd.StartW && uint32(x) < nd.EndW {
 			ret := nd.Dowork(pbp)
 			if ret != nil {
-                self.Unlock()
+				self.Unlock()
 				return ret
 			}
 		}
 	}
 	self.Unlock()
 	//not get at all
-	if self._AliveCount() > 0 {
-		self._DoRebalance()
+	if self._aliveCount() > 0 {
+		self._doRebalance()
 		return self.Dispatch(pbp)
 	}
-	fmt.Println("Dispatch fail, no alived server")
+	log.Println("Dispatch fail, no alived server")
 	return nil
 }
-

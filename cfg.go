@@ -1,10 +1,9 @@
-// cfg.go
 package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
+	"log"
 )
 
 type lbElem struct {
@@ -12,10 +11,11 @@ type lbElem struct {
 	Weight uint32
 }
 type lbElemAry struct {
-	Ary []lbElem
+	Ary  []lbElem
+	Port string
 }
 
-//{"Ary":[{"Host":"127.0.0.1:3301","Weight":8},{"Host":"127.0.0.1:3302","Weight":2}]}
+//{"Port":"3344","Ary":[{"Host":"127.0.0.1:12335","Weight":8},{"Host":"127.0.0.1:12336","Weight":2}]}
 var g_lbElemAry *lbElemAry
 
 func GetCfgData(f string) *lbElemAry {
@@ -26,7 +26,8 @@ func GetCfgData(f string) *lbElemAry {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println("load cfg file:", string(dat))
+
+	log.Println("load cfg file: %s", string(dat))
 	g_lbElemAry = &lbElemAry{}
 	err = json.Unmarshal(dat, g_lbElemAry)
 	if err != nil {
@@ -48,12 +49,13 @@ func test_cfg() {
 	e.Host = "127.0.0.1:3302"
 	e.Weight = uint32(2)
 	lst.Ary = append(lst.Ary, e)
+	lst.Port = "3344"
 
 	b, err := json.Marshal(lst)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(string(b))
+	log.Println(string(b))
 
 	lbRes := lbElemAry{}
 	err = json.Unmarshal(b, &lbRes)
@@ -61,6 +63,6 @@ func test_cfg() {
 		panic(err)
 	}
 	for _, elem := range lbRes.Ary {
-		fmt.Println(elem.Host, elem.Weight)
+		log.Println(elem.Host, elem.Weight)
 	}
 }
