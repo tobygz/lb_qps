@@ -13,6 +13,7 @@ type lbElem struct {
 type lbElemAry struct {
 	Ary  []lbElem
 	Port string
+    LogDir string
 }
 
 //{"Port":"3344","Ary":[{"Host":"127.0.0.1:12335","Weight":8},{"Host":"127.0.0.1:12336","Weight":2}]}
@@ -27,7 +28,7 @@ func GetCfgData(f string) *lbElemAry {
 		panic(err)
 	}
 
-	log.Println("load cfg file: %s", string(dat))
+	log.Printf("load cfg file: %s", string(dat))
 	g_lbElemAry = &lbElemAry{}
 	err = json.Unmarshal(dat, g_lbElemAry)
 	if err != nil {
@@ -55,7 +56,7 @@ func test_cfg() {
 	if err != nil {
 		panic(err)
 	}
-	log.Println(string(b))
+	log.Printf(string(b))
 
 	lbRes := lbElemAry{}
 	err = json.Unmarshal(b, &lbRes)
@@ -63,6 +64,6 @@ func test_cfg() {
 		panic(err)
 	}
 	for _, elem := range lbRes.Ary {
-		log.Println(elem.Host, elem.Weight)
+		log.Printf(elem.Host, elem.Weight)
 	}
 }

@@ -55,14 +55,14 @@ func (this *PBDataPack) Unpack(conn net.Conn) bool {
 	headbin := make([]byte, 12)
 
 	if _, err := io.ReadFull(conn, headbin); err != nil {
-		log.Println(err)
+        log.Printf("Unpack: %v", err)
 		return false
 	}
 
 	this.Head.Unpack(headbin)
 	this.Body = make([]byte, this.Head.Bodysize)
 	if _, err := io.ReadFull(conn, this.Body); err != nil {
-		log.Println(err)
+        log.Printf("Unpack1: %v", err)
 		return false
 	}
 	return true

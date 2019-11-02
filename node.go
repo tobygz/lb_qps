@@ -22,17 +22,17 @@ func (self *Node) init() bool {
 	var err error
 	self.conn, err = net.Dial("tcp", self.Host)
 	if err != nil {
-		log.Println("net dial host fail: %v", self.Host)
+		log.Printf("net dial host fail: %v", self.Host)
 		return false
 	}
-	log.Println("connect to %s succ", self.Host)
+	log.Printf("connect to %s succ", self.Host)
 	self.bconn = true
 	return true
 
 }
 
 func (self *Node) Dowork(pbp *PBDataPack) *PBDataPack {
-	log.Println("send to %s", self.Host)
+	log.Printf("send to %s", self.Host)
 	if pbp.Send(self.conn) == false {
 		self.bconn = false
 		return nil
@@ -87,7 +87,7 @@ func (self *NodeList) _doRebalance() {
 		node.EndW = startW + node.Weight
 		startW = node.EndW
 	}
-	log.Println("after dorebal total: %d, alivecount: %d", self._totalWeight, self._aliveCount())
+	log.Printf("after dorebal total: %d, alivecount: %d", self._totalWeight, self._aliveCount())
 }
 
 func (self *NodeList) init(cfgf string) {
@@ -172,7 +172,7 @@ func (self *NodeList) ChkAlive() {
 func (self *NodeList) Dispatch(pbp *PBDataPack) *PBDataPack {
 	self.Lock()
 	x := rand.Intn(int(self._totalWeight))
-	log.Println("Dispatch total: %d ,nowrand: %d", self._totalWeight, x)
+	log.Printf("Dispatch total: %d ,nowrand: %d", self._totalWeight, x)
 
 	for _, nd := range self._lst {
 		if nd.bconn == false {
@@ -192,6 +192,6 @@ func (self *NodeList) Dispatch(pbp *PBDataPack) *PBDataPack {
 		self._doRebalance()
 		return self.Dispatch(pbp)
 	}
-	log.Println("Dispatch fail, no alived server")
+	log.Printf("Dispatch fail, no alived server")
 	return nil
 }
