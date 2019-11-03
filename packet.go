@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
-	"io"
 	"log"
 	"net"
 )
@@ -49,18 +48,36 @@ type PBDataPack struct {
 	Body []byte
 }
 
+func (this *PBDataPack) ReadAtLeast(r net.Conn, buf []byte, min int) (n int, serr string) {
+	if len(buf) < min {
+		panic("error in ReadAtLeast ErrShortBuffer")
+	}
+	var err error = nil
+	for n < min && err == nil {
+		var nn int
+		nn, err = r.Read(buf[n:])
+		n += nn
+	}
+	if err != nil {
+		return 0, err.Error()
+	}
+	return n, ""
+}
+
 func (this *PBDataPack) Unpack(conn net.Conn) bool {
 
 	headbin := make([]byte, 12)
 
-	if _, err := io.ReadFull(conn, headbin); err != nil {
+	//if _, err := io.ReadFull(conn, headbin); err != nil {
+	if _, err := this.ReadAtLeast(conn, headbin, len(headbin)); err != "" {
 		log.Printf("Unpack: %v", err)
 		return false
 	}
 
 	this.Head.Unpack(headbin)
 	this.Body = make([]byte, this.Head.Bodysize)
-	if _, err := io.ReadFull(conn, this.Body); err != nil {
+	//if _, err := io.ReadFull(conn, this.Body); err != nil {
+	if _, err := this.ReadAtLeast(conn, this.Body, int(this.Head.Bodysize)); err != "" {
 		log.Printf("Unpack1: %v", err)
 		return false
 	}

@@ -31,8 +31,9 @@ func main() {
 		return
 	}
 
-	GetNodeList().init(*cfg)
+	GetCfgData(*cfg)
 	timerLog()
+	GetNodeList().init()
 
 	log.Printf("port:%v", g_lbElemAry.Port)
 	var l net.Listener

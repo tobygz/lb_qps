@@ -14,34 +14,86 @@ type Node struct {
 	EndW   uint32
 	Weight uint32
 
-	conn  net.Conn
-	bconn bool
+	//conn  net.Conn
+	connChan chan net.Conn
+	aliveCt  int
+	sync.Mutex
+}
+
+func (self *Node) incAlive() {
+	self.Lock()
+	defer self.Unlock()
+	self.aliveCt++
+}
+func (self *Node) GetAlive() int {
+	self.Lock()
+	defer self.Unlock()
+	return self.aliveCt
+}
+func (self *Node) decAlive() {
+	self.Lock()
+	defer self.Unlock()
+	self.aliveCt--
 }
 
 func (self *Node) init() bool {
-	var err error
-	self.conn, err = net.Dial("tcp", self.Host)
-	if err != nil {
-		log.Printf("net dial host fail: %v", self.Host)
-		return false
+	self.connChan = make(chan net.Conn, 128)
+	for i := 0; i < 12; i++ {
+		log.Printf("begin connect to %s", self.Host)
+		conn, err := net.Dial("tcp", self.Host)
+		if err != nil {
+			log.Printf("net dial host fail: %v", self.Host)
+			return false
+		}
+		self.connChan <- conn
+		self.incAlive()
+		log.Printf("connect to %s succ", self.Host)
 	}
-	log.Printf("connect to %s succ", self.Host)
-	self.bconn = true
+	self.timerConnCheck()
 	return true
 
 }
 
+func (self *Node) timerConnCheck() {
+	tk := time.NewTicker(time.Second)
+	go func() {
+		for {
+			select {
+			case <-tk.C:
+				self.initAllConn()
+			}
+		}
+	}()
+}
+
+func (self *Node) initAllConn() {
+	num := 12 - len(self.connChan)
+	for i := 0; i < num; i++ {
+		conn, err := net.Dial("tcp", self.Host)
+		if err != nil {
+			log.Printf("net dial host fail: %v", self.Host)
+			return
+		}
+		self.connChan <- conn
+		self.incAlive()
+		log.Printf("connect to %s succ", self.Host)
+	}
+}
+
 func (self *Node) Dowork(pbp *PBDataPack) *PBDataPack {
-	log.Printf("send to %s", self.Host)
-	if pbp.Send(self.conn) == false {
-		self.bconn = false
+	conn := <-self.connChan
+	if pbp.Send(conn) == false {
+		self.decAlive()
 		return nil
 	}
 	ret := &PBDataPack{}
-	if ret.Unpack(self.conn) == false {
-		self.bconn = false
+	if ret.Unpack(conn) == false {
+		self.decAlive()
+		log.Printf("conn lost %s connchan len: %d", self.Host, len(self.connChan))
 		return nil
 	}
+	log.Printf("send to %s connchan len: %d", self.Host, len(self.connChan))
+	self.connChan <- conn
 	return ret
 }
 
@@ -71,7 +123,7 @@ func (self *NodeList) _doRebalance() {
 	//get _totalWeight
 	self._totalWeight = uint32(0)
 	for _, node := range self._lst {
-		if node.bconn == false {
+		if node.GetAlive() == 0 {
 			continue
 		}
 		self._totalWeight += node.Weight
@@ -80,7 +132,7 @@ func (self *NodeList) _doRebalance() {
 	//calc startw & endw
 	startW := uint32(0)
 	for _, node := range self._lst {
-		if node.bconn == false {
+		if node.GetAlive() == 0 {
 			continue
 		}
 		node.StartW = startW
@@ -90,11 +142,11 @@ func (self *NodeList) _doRebalance() {
 	log.Printf("after dorebal total: %d, alivecount: %d", self._totalWeight, self._aliveCount())
 }
 
-func (self *NodeList) init(cfgf string) {
+func (self *NodeList) init() {
 	rand.Seed(time.Now().UnixNano())
 
 	//born all node from cfg
-	cfg := GetCfgData(cfgf)
+	cfg := GetCfgData("")
 	self._totalWeight = uint32(0)
 	for _, elem := range cfg.Ary {
 		self._totalWeight += elem.Weight
@@ -103,7 +155,7 @@ func (self *NodeList) init(cfgf string) {
 	startW := uint32(0)
 	for _, elem := range cfg.Ary {
 		node := &Node{
-			bconn: false,
+			aliveCt: 0,
 		}
 		node.Host = elem.Host
 		node.StartW = startW
@@ -113,6 +165,7 @@ func (self *NodeList) init(cfgf string) {
 		startW = node.EndW
 	}
 
+	log.Printf("begin connect to all hostconnect to all host")
 	//connect to all host
 	bfind := false
 	for _, node := range self._lst {
@@ -145,7 +198,7 @@ func (self *NodeList) _doReconnect() {
 func (self *NodeList) _aliveCount() int {
 	ct := 0
 	for _, nd := range self._lst {
-		if nd.bconn {
+		if nd.GetAlive() != 0 {
 			ct++
 		}
 	}
@@ -157,10 +210,7 @@ func (self *NodeList) ChkAlive() {
 	defer self.Unlock()
 	bfind := false
 	for _, nd := range self._lst {
-		if nd.bconn == true {
-			continue
-		}
-		if nd.init() {
+		if nd.GetAlive() == 0 {
 			bfind = true
 		}
 	}
@@ -170,27 +220,39 @@ func (self *NodeList) ChkAlive() {
 }
 
 func (self *NodeList) Dispatch(pbp *PBDataPack) (*PBDataPack, int) {
-	self.Lock()
-	defer self.Unlock()
-	x := rand.Uint32(self._totalWeight)
-	log.Printf("Dispatch total: %d ,nowrand: %d", self._totalWeight, x)
+	var _nd *Node
+	{
+		self.Lock()
+		x := rand.Intn(int(self._totalWeight))
+		log.Printf("Dispatch total: %d ,nowrand: %d", self._totalWeight, x)
 
-	for _, nd := range self._lst {
-		if nd.bconn == false {
-			continue
-		}
-		if uint32(x) >= nd.StartW && uint32(x) < nd.EndW {
-			ret := nd.Dowork(pbp)
-			if ret != nil {
-				return ret, 0
+		for _, nd := range self._lst {
+			if nd.GetAlive() == 0 {
+				continue
+			}
+			if uint32(x) >= nd.StartW && uint32(x) < nd.EndW {
+				_nd = nd
+				break
 			}
 		}
+		self.Unlock()
 	}
-	//not get at all
-	if self._aliveCount() > 0 {
-		self._doRebalance()
-		//need redo dispatch
-		return nil, 1
+
+	ret := _nd.Dowork(pbp)
+	if ret != nil {
+		return ret, 0
+	}
+
+	{
+		self.Lock()
+		//not get at all
+		if self._aliveCount() > 0 {
+			self._doRebalance()
+			//need redo dispatch
+			self.Unlock()
+			return nil, 1
+		}
+		self.Unlock()
 	}
 	log.Printf("Dispatch fail, no alived server")
 	return nil, 0
