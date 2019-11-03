@@ -169,9 +169,10 @@ func (self *NodeList) ChkAlive() {
 	}
 }
 
-func (self *NodeList) Dispatch(pbp *PBDataPack) *PBDataPack {
+func (self *NodeList) Dispatch(pbp *PBDataPack) (*PBDataPack, int) {
 	self.Lock()
-	x := rand.Intn(int(self._totalWeight))
+	defer self.Unlock()
+	x := rand.Uint32(self._totalWeight)
 	log.Printf("Dispatch total: %d ,nowrand: %d", self._totalWeight, x)
 
 	for _, nd := range self._lst {
@@ -181,17 +182,16 @@ func (self *NodeList) Dispatch(pbp *PBDataPack) *PBDataPack {
 		if uint32(x) >= nd.StartW && uint32(x) < nd.EndW {
 			ret := nd.Dowork(pbp)
 			if ret != nil {
-				self.Unlock()
-				return ret
+				return ret, 0
 			}
 		}
 	}
-	self.Unlock()
 	//not get at all
 	if self._aliveCount() > 0 {
 		self._doRebalance()
-		return self.Dispatch(pbp)
+		//need redo dispatch
+		return nil, 1
 	}
 	log.Printf("Dispatch fail, no alived server")
-	return nil
+	return nil, 0
 }

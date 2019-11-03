@@ -11,9 +11,9 @@ type lbElem struct {
 	Weight uint32
 }
 type lbElemAry struct {
-	Ary  []lbElem
-	Port string
-    LogDir string
+	Ary    []lbElem
+	Port   string
+	LogDir string
 }
 
 //{"Port":"3344","Ary":[{"Host":"127.0.0.1:12335","Weight":8},{"Host":"127.0.0.1:12336","Weight":2}]}

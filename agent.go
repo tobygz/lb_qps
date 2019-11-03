@@ -2,13 +2,13 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"net"
-	"time"
-	"fmt"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"time"
 )
 
 var port = flag.String("port", "3333", "port")
@@ -31,10 +31,10 @@ func main() {
 		return
 	}
 
-    GetNodeList().init(*cfg)
-    timerLog()
+	GetNodeList().init(*cfg)
+	timerLog()
 
-    log.Printf("port:%v", g_lbElemAry.Port )
+	log.Printf("port:%v", g_lbElemAry.Port)
 	var l net.Listener
 	var err error
 	l, err = net.Listen("tcp", ":"+g_lbElemAry.Port)
@@ -60,25 +60,41 @@ func main() {
 func handReqProxy(conn net.Conn) {
 	log.Printf("accept conn handReqProxy")
 	pp := &PBDataPack{}
+	ch := make(chan *PBDataPack, 1024)
+	for i := 0; i < 12; i++ {
+		go func() {
+			for {
+				select {
+				case tpp := <-ch:
+					ppr, tp := GetNodeList().Dispatch(tpp)
+					if ppr == nil {
+						if tp == 1 {
+							ch <- tpp
+							continue
+						}
+						log.Printf("dispatch fail, is all server crashed")
+						continue
+					}
+					//send to client
+					if !ppr.Send(conn) {
+						break
+					}
+				}
+			}
+		}()
+	}
 	for {
 		//read from client
 		if !pp.Unpack(conn) {
-            break
+			break
 		}
-		ppr := GetNodeList().Dispatch(pp)
-		if ppr == nil {
-			log.Printf("dispatch fail, is all server crashed")
-            continue
-		}
-		//send to client
-		if !ppr.Send(conn) {
-            break
-		}
+		ch <- pp
+		log.Printf("chan len: %d", len(ch))
 	}
 }
 func rotateLog() {
 	t := time.Unix(time.Now().Unix(), 0)
-	nt := t.Format("2006_01_02_15_04_05")
+	nt := t.Format("2006_01_02_15")
 
 	fname := fmt.Sprintf("%s/%s_%s.log", g_lbElemAry.LogDir, "/agent", nt)
 	f, err := os.OpenFile(fname, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
