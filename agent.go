@@ -60,7 +60,6 @@ func main() {
 //for proxy
 func handReqProxy(conn net.Conn) {
 	log.Printf("accept conn handReqProxy")
-	pp := &PBDataPack{}
 	ch := make(chan *PBDataPack, 1024)
 	chExit := make(chan bool, 32)
 	for i := 0; i < 12; i++ {
@@ -88,6 +87,8 @@ func handReqProxy(conn net.Conn) {
 		}()
 	}
 	for {
+		//pp := &PBDataPack{}
+		pp := g_pb.Get().(*PBDataPack)
 		//read from client
 		if !pp.Unpack(conn) {
 			for i := 0; i < 32; i++ {

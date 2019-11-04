@@ -5,6 +5,8 @@ import (
 	"encoding/binary"
 	"log"
 	"net"
+	"sync"
+	"time"
 )
 
 type PkgHead struct {
@@ -48,6 +50,16 @@ type PBDataPack struct {
 	Body []byte
 }
 
+var g_pb *sync.Pool
+
+func init() {
+	g_pb = &sync.Pool{
+		New: func() interface{} {
+			return &PBDataPack{}
+		},
+	}
+}
+
 func (this *PBDataPack) ReadAtLeast(r net.Conn, buf []byte, min int) (n int, serr string) {
 	if len(buf) < min {
 		panic("error in ReadAtLeast ErrShortBuffer")
@@ -55,6 +67,7 @@ func (this *PBDataPack) ReadAtLeast(r net.Conn, buf []byte, min int) (n int, ser
 	var err error = nil
 	for n < min && err == nil {
 		var nn int
+		r.SetReadDeadline(time.Now().Add(time.Second * 3))
 		nn, err = r.Read(buf[n:])
 		if err != nil {
 			return 0, err.Error()

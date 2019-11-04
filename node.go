@@ -232,6 +232,7 @@ func (self *NodeList) Dispatch(pbp *PBDataPack) (*PBDataPack, int) {
 	}
 
 	ret := _nd.Dowork(pbp)
+	g_pb.Put(pbp)
 	if ret != nil {
 		return ret, 0
 	}
