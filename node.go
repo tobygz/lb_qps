@@ -38,23 +38,13 @@ func (self *Node) decAlive() {
 
 func (self *Node) init() bool {
 	self.connChan = make(chan net.Conn, 128)
-	for i := 0; i < 12; i++ {
-		log.Printf("begin connect to %s", self.Host)
-		conn, err := net.Dial("tcp", self.Host)
-		if err != nil {
-			log.Printf("net dial host fail: %v", self.Host)
-			return false
-		}
-		self.connChan <- conn
-		self.incAlive()
-		log.Printf("connect to %s succ", self.Host)
-	}
 	self.timerConnCheck()
 	return true
 
 }
 
 func (self *Node) timerConnCheck() {
+	self.initAllConn()
 	tk := time.NewTicker(time.Second)
 	go func() {
 		for {
@@ -81,6 +71,9 @@ func (self *Node) initAllConn() {
 }
 
 func (self *Node) Dowork(pbp *PBDataPack) *PBDataPack {
+	if pbp == nil {
+		return nil
+	}
 	conn := <-self.connChan
 	if pbp.Send(conn) == false {
 		self.decAlive()
@@ -139,7 +132,7 @@ func (self *NodeList) _doRebalance() {
 		node.EndW = startW + node.Weight
 		startW = node.EndW
 	}
-	log.Printf("after dorebal total: %d, alivecount: %d", self._totalWeight, self._aliveCount())
+	log.Printf("after dorebal totalWeight: %d, alive node count: %d", self._totalWeight, self._aliveCount())
 }
 
 func (self *NodeList) init() {

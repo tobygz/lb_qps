@@ -62,6 +62,7 @@ func handReqProxy(conn net.Conn) {
 	log.Printf("accept conn handReqProxy")
 	pp := &PBDataPack{}
 	ch := make(chan *PBDataPack, 1024)
+	chExit := make(chan bool, 32)
 	for i := 0; i < 12; i++ {
 		go func() {
 			for {
@@ -74,12 +75,14 @@ func handReqProxy(conn net.Conn) {
 							continue
 						}
 						log.Printf("dispatch fail, is all server crashed")
-						continue
+						return
 					}
 					//send to client
 					if !ppr.Send(conn) {
-						break
+						return
 					}
+				case <-chExit:
+					return
 				}
 			}
 		}()
@@ -87,6 +90,9 @@ func handReqProxy(conn net.Conn) {
 	for {
 		//read from client
 		if !pp.Unpack(conn) {
+			for i := 0; i < 32; i++ {
+				chExit <- false
+			}
 			break
 		}
 		ch <- pp

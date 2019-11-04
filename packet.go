@@ -56,6 +56,9 @@ func (this *PBDataPack) ReadAtLeast(r net.Conn, buf []byte, min int) (n int, ser
 	for n < min && err == nil {
 		var nn int
 		nn, err = r.Read(buf[n:])
+		if err != nil {
+			return 0, err.Error()
+		}
 		n += nn
 	}
 	if err != nil {
